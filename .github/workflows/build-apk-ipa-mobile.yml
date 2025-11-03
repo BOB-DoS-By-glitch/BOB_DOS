@@ -1,18 +1,14 @@
 name: Build Android (APK and AAB)
 
 on:
-  # التشغيل عند الدفع إلى أي من الفروع التالية
   push:
     branches:
       - master
       - main
-  # التشغيل عند فتح طلب دمج يستهدف أحد الفروع التالية
   pull_request:
     branches:
       - master
       - main
-
-  # التشغيل اليدوي من علامة تبويب Actions
   workflow_dispatch:
 
 env:
@@ -38,6 +34,7 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
+        pip install flet
 
     - name: Setup Flutter ${{ env.FLUTTER_VERSION }}
       uses: subosito/flutter-action@v2
@@ -53,7 +50,7 @@ jobs:
     - name: Flet Build APK
       run: |
         flutter config --no-analytics
-        flet build apk --verbose --build-number=$BUILD_NUMBER --build-version=$BUILD_VERSION
+        flet build apk --python main.py --verbose --build-number=$BUILD_NUMBER --build-version=$BUILD_VERSION
 
     - name: Upload APK Artifact
       uses: actions/upload-artifact@v4.3.4
@@ -79,6 +76,7 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
+        pip install flet
 
     - name: Setup Flutter ${{ env.FLUTTER_VERSION }}
       uses: subosito/flutter-action@v2
@@ -94,7 +92,7 @@ jobs:
     - name: Flet Build AAB
       run: |
         flutter config --no-analytics
-        flet build aab --verbose --build-number=$BUILD_NUMBER --build-version=$BUILD_VERSION
+        flet build aab --python main.py --verbose --build-number=$BUILD_NUMBER --build-version=$BUILD_VERSION
 
     - name: Upload AAB Artifact
       uses: actions/upload-artifact@v4.3.4
