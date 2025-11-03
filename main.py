@@ -1,51 +1,88 @@
-from kivy.app import App
-from kivy.uix.boxlayout import BoxLayout
-from kivy.uix.button import Button
-from kivy.uix.label import Label
-from kivy.animation import Animation
-from kivy.core.window import Window
+import flet as ft
 
-class AnimatedWelcomeApp(App):
-    def build(self):
-        Window.clearcolor = (0.95, 0.95, 0.95, 1)
-        
-        layout = BoxLayout(orientation='vertical', padding=50, spacing=30)
-        
-        # الزر مع تأثيرات
-        self.button = Button(
-            text='🎉 اضغط هنا 🎉',
-            size_hint=(0.6, 0.4),
-            pos_hint={'center_x': 0.5},
-            font_size='22sp',
-            background_color=(0.3, 0.7, 0.3, 1),
-            color=(1, 1, 1, 1)
-        )
-        self.button.bind(on_press=self.animate_welcome)
-        
-        # التسمية
-        self.label = Label(
-            text='',
-            font_size='28sp',
-            color=(0.8, 0.2, 0.2, 1),
-            bold=True
-        )
-        
-        layout.add_widget(self.button)
-        layout.add_widget(self.label)
-        
-        return layout
+def main(page: ft.Page):
+    # إعدادات الصفحة
+    page.title = "تطبيق Flet بسيط"
+    page.theme_mode = ft.ThemeMode.LIGHT
+    page.vertical_alignment = ft.MainAxisAlignment.CENTER
+    page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
     
-    def animate_welcome(self, instance):
-        # تأثير اهتزاز للزر
-        anim = Animation(center_x=300, duration=0.1) + Animation(center_x=250, duration=0.1)
-        anim.start(instance)
-        
-        # عرض رسالة الترحيب
-        self.label.text = "🎊 نرحب بكم 🎊"
-        
-        # تأثير للتسمية
-        anim_label = Animation(font_size=32, duration=0.3) + Animation(font_size=28, duration=0.3)
-        anim_label.start(self.label)
+    # متغيرات التطبيق
+    counter = 0
+    
+    def increment_counter(e):
+        nonlocal counter
+        counter += 1
+        counter_text.value = f"العداد: {counter}"
+        page.update()
+    
+    def reset_counter(e):
+        nonlocal counter
+        counter = 0
+        counter_text.value = f"العداد: {counter}"
+        page.update()
+    
+    def change_theme(e):
+        page.theme_mode = (
+            ft.ThemeMode.DARK if page.theme_mode == ft.ThemeMode.LIGHT 
+            else ft.ThemeMode.LIGHT
+        )
+        theme_button.text = (
+            "تفعيل الوضع النهاري" if page.theme_mode == ft.ThemeMode.DARK 
+            else "تفعيل الوضع الليلي"
+        )
+        page.update()
+    
+    # عناصر الواجهة
+    title = ft.Text(
+        "مرحباً بك في تطبيق Flet!",
+        size=24,
+        weight=ft.FontWeight.BOLD,
+        text_align=ft.TextAlign.CENTER
+    )
+    
+    counter_text = ft.Text(
+        f"العداد: {counter}",
+        size=20,
+        text_align=ft.TextAlign.CENTER
+    )
+    
+    increment_button = ft.ElevatedButton(
+        "زيادة العداد",
+        on_click=increment_counter,
+        icon=ft.icons.ADD
+    )
+    
+    reset_button = ft.ElevatedButton(
+        "إعادة تعيين",
+        on_click=reset_counter,
+        icon=ft.icons.REFRESH
+    )
+    
+    theme_button = ft.ElevatedButton(
+        "تفعيل الوضع الليلي",
+        on_click=change_theme,
+        icon=ft.icons.DARK_MODE
+    )
+    
+    # إضافة العناصر إلى الصفحة
+    page.add(
+        ft.Column(
+            [
+                title,
+                ft.Divider(),
+                counter_text,
+                ft.Row(
+                    [increment_button, reset_button],
+                    alignment=ft.MainAxisAlignment.CENTER
+                ),
+                theme_button
+            ],
+            alignment=ft.MainAxisAlignment.CENTER,
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER
+        )
+    )
 
-if __name__ == '__main__':
-    AnimatedWelcomeApp().run()
+# تشغيل التطبيق
+if __name__ == "__main__":
+    ft.app(target=main)
