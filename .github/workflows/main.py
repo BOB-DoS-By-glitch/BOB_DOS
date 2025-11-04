@@ -1,4 +1,19 @@
-import flet as ft
+from kivy.app import App
+from kivy.uix.boxlayout import BoxLayout
+from kivy.uix.gridlayout import GridLayout
+from kivy.uix.label import Label
+from kivy.uix.textinput import TextInput
+from kivy.uix.button import Button
+from kivy.uix.togglebutton import ToggleButton
+from kivy.uix.scrollview import ScrollView
+from kivy.uix.popup import Popup
+from kivy.uix.progressbar import ProgressBar
+from kivy.uix.filechooser import FileChooserListView
+from kivy.uix.modalview import ModalView
+from kivy.clock import Clock
+from kivy.graphics import Color, Rectangle
+from kivy.core.window import Window
+from kivy.utils import get_color_from_hex
 import os
 import base64
 import zipfile
@@ -8,6 +23,10 @@ import subprocess
 import uuid
 import datetime
 import sys
+
+# Set window size
+Window.size = (800, 900)
+Window.clearcolor = get_color_from_hex('#121212')
 
 def install():
     try:
@@ -197,65 +216,318 @@ finally:
 
     return final_output
 
-class NinjiGramProApp:
-    def __init__(self):
+class StyledButton(Button):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.background_color = get_color_from_hex('#00cc99')
+        self.color = get_color_from_hex('#ffffff')
+        self.size_hint_y = None
+        self.height = 50
+        self.font_size = 16
+
+class StyledTextInput(TextInput):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.background_color = get_color_from_hex('#1e1e1e')
+        self.foreground_color = get_color_from_hex('#eeeeee')
+        self.size_hint_y = None
+        self.height = 40
+        self.multiline = False
+        self.padding = [10, 10]
+
+class StyledLabel(Label):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.color = get_color_from_hex('#eeeeee')
+        self.size_hint_y = None
+        self.height = 30
+
+class HeaderLabel(Label):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.color = get_color_from_hex('#00ffcc')
+        self.font_size = 18
+        self.bold = True
+        self.size_hint_y = None
+        self.height = 40
+
+class ProtectionToggle(ToggleButton):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.background_color = get_color_from_hex('#1e1e1e')
+        self.color = get_color_from_hex('#eeeeee')
+        self.size_hint_y = None
+        self.height = 40
+        self.group = 'protection'
+
+class FileChooserPopup(Popup):
+    def __init__(self, callback, **kwargs):
+        super().__init__(**kwargs)
+        self.title = 'Select Python File'
+        self.size_hint = (0.9, 0.8)
+        self.callback = callback
+        
+        layout = BoxLayout(orientation='vertical')
+        
+        filechooser = FileChooserListView(filters=['*.py'])
+        layout.add_widget(filechooser)
+        
+        btn_layout = BoxLayout(size_hint_y=None, height=50)
+        btn_select = Button(text='Select', background_color=get_color_from_hex('#00cc99'))
+        btn_cancel = Button(text='Cancel', background_color=get_color_from_hex('#cc0000'))
+        
+        btn_select.bind(on_press=lambda x: self.select_file(filechooser))
+        btn_cancel.bind(on_press=self.dismiss)
+        
+        btn_layout.add_widget(btn_select)
+        btn_layout.add_widget(btn_cancel)
+        layout.add_widget(btn_layout)
+        
+        self.content = layout
+    
+    def select_file(self, filechooser):
+        if filechooser.selection:
+            self.callback(filechooser.selection[0])
+            self.dismiss()
+
+class NinjiGramProApp(App):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
         self.selected_file = None
         self.protection_type = "expiry"
-        self.time_text = ft.Text("", size=18, color=ft.colors.TEAL_200)
-        self.file_name_text = ft.Text("", color=ft.colors.WHITE)
-        self.status_text = ft.Text("", color=ft.colors.GREEN)
-        self.error_text = ft.Text("", color=ft.colors.RED)
+        self.time_label = None
+
+    def build(self):
+        # Main layout
+        main_layout = BoxLayout(orientation='vertical', padding=10, spacing=10)
         
-    def update_time(self, e=None):
+        # Header
+        header = self.create_header()
+        main_layout.add_widget(header)
+        
+        # Scrollable content
+        scroll = ScrollView()
+        content = BoxLayout(orientation='vertical', spacing=10, size_hint_y=None)
+        content.bind(minimum_height=content.setter('height'))
+        
+        # Add content widgets
+        content.add_widget(self.create_file_section())
+        content.add_widget(self.create_credentials_section())
+        content.add_widget(self.create_protection_section())
+        content.add_widget(self.create_action_section())
+        content.add_widget(self.create_info_section())
+        
+        scroll.add_widget(content)
+        main_layout.add_widget(scroll)
+        
+        # Start clock updates
+        Clock.schedule_interval(self.update_time, 1)
+        
+        return main_layout
+    
+    def create_header(self):
+        header = BoxLayout(orientation='horizontal', size_hint_y=None, height=60)
+        
+        # Time display
+        time_layout = BoxLayout(orientation='horizontal', size_hint_x=0.3)
+        self.time_label = Label(text='00:00:00', color=get_color_from_hex('#00ffcc'), font_size=16)
+        time_status = Label(text='✓', color=get_color_from_hex('#000000'), 
+                          font_size=14, bold=True)
+        time_status.background_color = get_color_from_hex('#00ff00')
+        
+        time_layout.add_widget(self.time_label)
+        time_layout.add_widget(time_status)
+        
+        # Title
+        title = Label(text='NinjiGramPro', font_size=24, bold=True,
+                     color=get_color_from_hex('#ff0000'))
+        
+        # Profile button
+        profile_btn = Button(text='ⓘ', font_size=20, size_hint_x=0.1,
+                           background_color=get_color_from_hex('#00ffcc'))
+        profile_btn.bind(on_press=self.show_info_popup)
+        
+        header.add_widget(time_layout)
+        header.add_widget(title)
+        header.add_widget(profile_btn)
+        
+        return header
+    
+    def create_file_section(self):
+        section = BoxLayout(orientation='vertical', size_hint_y=None, height=120)
+        
+        title = HeaderLabel(text='File Selection')
+        section.add_widget(title)
+        
+        self.file_btn = StyledButton(text='Choose Python File')
+        self.file_btn.bind(on_press=self.show_file_chooser)
+        section.add_widget(self.file_btn)
+        
+        self.file_label = StyledLabel(text='No file selected')
+        section.add_widget(self.file_label)
+        
+        return section
+    
+    def create_credentials_section(self):
+        section = BoxLayout(orientation='vertical', size_hint_y=None, height=120)
+        
+        title = HeaderLabel(text='Credentials')
+        section.add_widget(title)
+        
+        self.user_id_input = StyledTextInput(hint_text='Enter your ID')
+        section.add_widget(self.user_id_input)
+        
+        self.user_token_input = StyledTextInput(hint_text='Enter your token')
+        section.add_widget(self.user_token_input)
+        
+        return section
+    
+    def create_protection_section(self):
+        section = BoxLayout(orientation='vertical', size_hint_y=None, height=300)
+        
+        title = HeaderLabel(text='Protection Type')
+        section.add_widget(title)
+        
+        # Protection toggle buttons
+        toggle_layout = BoxLayout(orientation='horizontal', size_hint_y=None, height=50)
+        
+        self.expiry_toggle = ProtectionToggle(text='Expiry Date Protection')
+        self.server_toggle = ProtectionToggle(text='Server Check Protection')
+        
+        self.expiry_toggle.state = 'down'
+        
+        self.expiry_toggle.bind(on_press=self.on_protection_changed)
+        self.server_toggle.bind(on_press=self.on_protection_changed)
+        
+        toggle_layout.add_widget(self.expiry_toggle)
+        toggle_layout.add_widget(self.server_toggle)
+        section.add_widget(toggle_layout)
+        
+        # Expiry section
+        self.expiry_section = BoxLayout(orientation='vertical', size_hint_y=None, height=150)
+        
+        self.expiry_date_input = StyledTextInput(hint_text='YYYY-MM-DD')
+        self.username_input = StyledTextInput(hint_text='@your_username')
+        
+        expiry_note = StyledLabel(text='Tool will stop working after this date', font_size=12)
+        
+        self.expiry_section.add_widget(StyledLabel(text='Expiry Date:'))
+        self.expiry_section.add_widget(self.expiry_date_input)
+        self.expiry_section.add_widget(StyledLabel(text='Your Username:'))
+        self.expiry_section.add_widget(self.username_input)
+        self.expiry_section.add_widget(expiry_note)
+        
+        # Server section
+        self.server_section = BoxLayout(orientation='vertical', size_hint_y=None, height=100)
+        self.server_section.visible = False
+        
+        self.server_url_input = StyledTextInput(hint_text='https://example.com/status.txt')
+        server_note = StyledLabel(text='Tool will check this URL for ON status', font_size=12)
+        
+        self.server_section.add_widget(StyledLabel(text='Server URL:'))
+        self.server_section.add_widget(self.server_url_input)
+        self.server_section.add_widget(server_note)
+        
+        section.add_widget(self.expiry_section)
+        section.add_widget(self.server_section)
+        
+        return section
+    
+    def create_action_section(self):
+        section = BoxLayout(orientation='vertical', size_hint_y=None, height=100)
+        
+        self.encrypt_btn = StyledButton(text='Encrypt Files')
+        self.encrypt_btn.bind(on_press=self.encrypt_file)
+        self.encrypt_btn.disabled = True
+        section.add_widget(self.encrypt_btn)
+        
+        self.status_label = StyledLabel(text='', color=get_color_from_hex('#00ff00'))
+        self.error_label = StyledLabel(text='', color=get_color_from_hex('#ff0000'))
+        
+        section.add_widget(self.status_label)
+        section.add_widget(self.error_label)
+        
+        return section
+    
+    def create_info_section(self):
+        section = BoxLayout(orientation='vertical', size_hint_y=None, height=200)
+        
+        # How to use
+        how_to_layout = BoxLayout(orientation='vertical', size_hint_y=None, height=120)
+        how_to_layout.background_color = get_color_from_hex('#1e1e1e')
+        
+        how_to_title = HeaderLabel(text='How to Use')
+        how_to_layout.add_widget(how_to_title)
+        
+        steps = [
+            "1. Click 'Choose Python File' to select your file",
+            "2. Fill in your credentials",
+            "3. Select protection type and configure",
+            "4. Click 'Encrypt Files' to start encryption"
+        ]
+        
+        for step in steps:
+            how_to_layout.add_widget(StyledLabel(text=step, font_size=12))
+        
+        section.add_widget(how_to_layout)
+        
+        return section
+    
+    def update_time(self, dt):
         now = datetime.datetime.now()
-        self.time_text.value = now.strftime("%H:%M:%S")
-        self.page.update()
+        self.time_label.text = now.strftime("%H:%M:%S")
     
-    def on_file_selected(self, e: ft.FilePickerResultEvent):
-        if e.files:
-            self.selected_file = e.files[0].path
-            self.file_name_text.value = f"Selected File: {e.files[0].name}"
-            self.encrypt_btn.visible = True
-            self.page.update()
+    def show_file_chooser(self, instance):
+        popup = FileChooserPopup(self.on_file_selected)
+        popup.open()
     
-    def on_protection_changed(self, e):
-        self.protection_type = e.control.data
-        # Update UI based on selection
-        for option in self.protection_options:
-            option.bgcolor = ft.colors.TEAL if option.data == self.protection_type else ft.colors.GREY_800
-        self.expiry_section.visible = (self.protection_type == "expiry")
-        self.server_section.visible = (self.protection_type == "server")
-        self.page.update()
+    def on_file_selected(self, file_path):
+        self.selected_file = file_path
+        self.file_label.text = f"Selected: {os.path.basename(file_path)}"
+        self.encrypt_btn.disabled = False
     
-    def encrypt_file(self, e):
+    def on_protection_changed(self, instance):
+        if instance.text == 'Expiry Date Protection':
+            self.protection_type = "expiry"
+            self.expiry_section.height = 150
+            self.expiry_section.visible = True
+            self.server_section.height = 0
+            self.server_section.visible = False
+        else:
+            self.protection_type = "server"
+            self.expiry_section.height = 0
+            self.expiry_section.visible = False
+            self.server_section.height = 100
+            self.server_section.visible = True
+        
+        # Force layout update
+        self.root.do_layout()
+    
+    def encrypt_file(self, instance):
         if not self.selected_file:
-            self.error_text.value = "Please select a file first"
-            self.page.update()
+            self.error_label.text = "Please select a file first"
             return
         
-        user_id = self.user_id_field.value
-        user_token = self.user_token_field.value
+        user_id = self.user_id_input.text
+        user_token = self.user_token_input.text
         
         if not user_id or not user_token:
-            self.error_text.value = "ID and Token are required"
-            self.page.update()
+            self.error_label.text = "ID and Token are required"
             return
         
         try:
             if self.protection_type == "expiry":
-                expiry_date_str = self.expiry_date_field.value
-                username = self.username_field.value
+                expiry_date_str = self.expiry_date_input.text
+                username = self.username_input.text
                 if not expiry_date_str or not username:
-                    self.error_text.value = "Expiry date and username are required"
-                    self.page.update()
+                    self.error_label.text = "Expiry date and username are required"
                     return
                 expiry_date = datetime.datetime.strptime(expiry_date_str, '%Y-%m-%d').date()
                 server_url = None
-            else:  # server protection
-                server_url = self.server_url_field.value
+            else:
+                server_url = self.server_url_input.text
                 if not server_url:
-                    self.error_text.value = "Server URL is required"
-                    self.page.update()
+                    self.error_label.text = "Server URL is required"
                     return
                 expiry_date = None
                 username = None
@@ -263,8 +535,18 @@ class NinjiGramProApp:
             # Show loading state
             self.encrypt_btn.text = "Encrypting..."
             self.encrypt_btn.disabled = True
-            self.page.update()
+            self.status_label.text = "Starting encryption process..."
             
+            # Process in a separate thread to avoid UI freeze
+            Clock.schedule_once(lambda dt: self._do_encryption(user_id, user_token, expiry_date, username, server_url), 0.1)
+            
+        except Exception as e:
+            self.error_label.text = f"Error: {str(e)}"
+            self.encrypt_btn.text = "Encrypt Files"
+            self.encrypt_btn.disabled = False
+    
+    def _do_encryption(self, user_id, user_token, expiry_date, username, server_url):
+        try:
             # Create temp directory
             temp_dir = tempfile.mkdtemp()
             session_id = str(uuid.uuid4())
@@ -281,298 +563,43 @@ class NinjiGramProApp:
             # Clean up
             shutil.rmtree(temp_dir, ignore_errors=True)
             
-            self.status_text.value = f"Done! File saved to: {result_file}"
-            self.error_text.value = ""
+            self.status_label.text = f"Done! File saved to: {result_file}"
+            self.error_label.text = ""
             
         except Exception as ex:
-            self.error_text.value = f"Encryption failed: {str(ex)}"
-            self.status_text.value = ""
+            self.error_label.text = f"Encryption failed: {str(ex)}"
+            self.status_label.text = ""
         finally:
             self.encrypt_btn.text = "Encrypt Files"
             self.encrypt_btn.disabled = False
-            self.page.update()
     
-    def build(self, page: ft.Page):
-        self.page = page
-        page.title = "NinjiGramPro Encryptor"
-        page.theme_mode = ft.ThemeMode.DARK
-        page.bgcolor = ft.colors.BLACK
-        page.padding = 0
+    def show_info_popup(self, instance):
+        content = BoxLayout(orientation='vertical', spacing=10)
         
-        # File picker
-        self.file_picker = ft.FilePicker(on_result=self.on_file_selected)
-        page.overlay.append(self.file_picker)
-        
-        # Header
-        header = ft.Container(
-            content=ft.Row([
-                ft.Container(
-                    content=ft.Row([
-                        self.time_text,
-                        ft.Container(
-                            width=20, height=20, border_radius=10,
-                            bgcolor=ft.colors.GREEN,
-                            content=ft.Text("✓", size=12, color=ft.colors.BLACK, weight=ft.FontWeight.BOLD),
-                            alignment=ft.alignment.center
-                        )
-                    ]),
-                    padding=10
-                ),
-                ft.Container(
-                    content=ft.Text(
-                        "NinjiGramPro",
-                        size=24,
-                        weight=ft.FontWeight.BOLD,
-                        gradient=ft.LinearGradient(
-                            colors=[ft.colors.RED, ft.colors.WHITE, ft.colors.RED]
-                        )
-                    ),
-                    animate_offset=ft.animation.Animation(3000, ft.AnimationCurve.BOUNCE_OUT),
-                    offset=ft.transform.Offset(0, -0.1)
-                ),
-                ft.Container(
-                    content=ft.IconButton(
-                        icon=ft.icons.PERSON,
-                        icon_color=ft.colors.TEAL_200,
-                        icon_size=30,
-                        on_click=lambda _: self.show_info_dialog()
-                    )
-                )
-            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-            bgcolor=ft.colors.GREY_900,
-            padding=15,
-            border_radius=ft.border_radius.only(bottom_left=10, bottom_right=10)
-        )
-        
-        # Main content
-        self.user_id_field = ft.TextField(
-            label="Your ID",
-            hint_text="Enter your ID",
-            border_color=ft.colors.GREY_600,
-            filled=True,
-            bgcolor=ft.colors.GREY_900
-        )
-        
-        self.user_token_field = ft.TextField(
-            label="Your Token",
-            hint_text="Enter your token",
-            border_color=ft.colors.GREY_600,
-            filled=True,
-            bgcolor=ft.colors.GREY_900
-        )
-        
-        # Protection type selection
-        self.protection_options = []
-        expiry_option = ft.Container(
-            content=ft.Text("Expiry Date Protection"),
-            data="expiry",
-            padding=15,
-            border_radius=5,
-            bgcolor=ft.colors.TEAL,
-            on_click=self.on_protection_changed
-        )
-        
-        server_option = ft.Container(
-            content=ft.Text("Server Check Protection"),
-            data="server",
-            padding=15,
-            border_radius=5,
-            bgcolor=ft.colors.GREY_800,
-            on_click=self.on_protection_changed
-        )
-        
-        self.protection_options.extend([expiry_option, server_option])
-        
-        # Expiry section
-        self.expiry_date_field = ft.TextField(
-            label="Expiry Date (YYYY-MM-DD)",
-            hint_text="2024-12-31",
-            border_color=ft.colors.GREY_600,
-            filled=True,
-            bgcolor=ft.colors.GREY_900
-        )
-        
-        self.username_field = ft.TextField(
-            label="Your Username",
-            hint_text="@your_username",
-            border_color=ft.colors.GREY_600,
-            filled=True,
-            bgcolor=ft.colors.GREY_900
-        )
-        
-        self.expiry_section = ft.Column([
-            self.expiry_date_field,
-            self.username_field,
-            ft.Text("Tool will stop working after this date", size=12, color=ft.colors.GREY_400)
-        ])
-        
-        # Server section
-        self.server_url_field = ft.TextField(
-            label="Server URL",
-            hint_text="https://example.com/status.txt",
-            border_color=ft.colors.GREY_600,
-            filled=True,
-            bgcolor=ft.colors.GREY_900
-        )
-        
-        self.server_section = ft.Column([
-            self.server_url_field,
-            ft.Text("Tool will check this URL for 'ON' status", size=12, color=ft.colors.GREY_400)
-        ], visible=False)
-        
-        # Encrypt button
-        self.encrypt_btn = ft.ElevatedButton(
-            "Encrypt Files",
-            icon=ft.icons.LOCK,
-            on_click=self.encrypt_file,
-            visible=False,
-            style=ft.ButtonStyle(
-                bgcolor=ft.colors.TEAL,
-                color=ft.colors.WHITE
-            )
-        )
-        
-        # Info sections
-        how_to_use = ft.Container(
-            content=ft.Column([
-                ft.Text("How to Use", size=18, color=ft.colors.TEAL_200),
-                ft.Text("1. Click 'Choose Python File' to select your file"),
-                ft.Text("2. The file will be uploaded automatically"),
-                ft.Text("3. Click 'Encrypt Files' to start encryption process"),
-                ft.Text("4. Download your encrypted file when ready"),
-            ]),
-            bgcolor=ft.colors.GREY_900,
-            padding=20,
-            border_radius=10
-        )
-        
-        copyright_info = ft.Container(
-            content=ft.Column([
-                ft.Text("Copyright & Credentials", size=18, color=ft.colors.TEAL_200),
-                ft.Text("This software is developed by Plya_Team"),
-                ft.Text("User ID: XXXXXX"),
-                ft.Text("Token: ************"),
-            ]),
-            bgcolor=ft.colors.GREY_900,
-            padding=20,
-            border_radius=10
-        )
-        
-        # Floating action button
-        fab = ft.Container(
-            content=ft.IconButton(
-                icon=ft.icons.ADD,
-                icon_color=ft.colors.WHITE,
-                icon_size=30,
-                on_click=lambda _: self.show_time_dialog()
-            ),
-            width=60, height=60,
-            bgcolor=ft.colors.BLUE,
-            border_radius=30,
-            alignment=ft.alignment.center,
-            right=20, bottom=20,
-            animate_position=ft.animation.Animation(300, ft.AnimationCurve.EASE_OUT)
-        )
-        
-        # Main layout
-        main_content = ft.Container(
-            content=ft.Column([
-                ft.Text("Enc_NinjiGramPro By Plya_Team", size=20, weight=ft.FontWeight.BOLD),
-                
-                ft.ElevatedButton(
-                    "Choose Python File",
-                    icon=ft.icons.UPLOAD_FILE,
-                    on_click=lambda _: self.file_picker.pick_files(
-                        allowed_extensions=["py"],
-                        dialog_title="Select Python File"
-                    ),
-                    style=ft.ButtonStyle(
-                        bgcolor=ft.colors.TEAL,
-                        color=ft.colors.WHITE,
-                        padding=20
-                    )
-                ),
-                
-                ft.Container(content=self.file_name_text, padding=10),
-                
-                self.user_id_field,
-                self.user_token_field,
-                
-                ft.Row(self.protection_options, alignment=ft.MainAxisAlignment.SPACE_EVENLY),
-                self.expiry_section,
-                self.server_section,
-                
-                self.encrypt_btn,
-                self.status_text,
-                self.error_text,
-                
-                how_to_use,
-                copyright_info
-            ], scroll=ft.ScrollMode.ADAPTIVE),
-            padding=20,
-            alignment=ft.alignment.top_center
-        )
-        
-        # Stack for FAB
-        content_stack = ft.Stack([
-            ft.Column([header, main_content]),
-            ft.Container(content=fab, alignment=ft.alignment.bottom_right)
-        ])
-        
-        # Start time updates
-        self.update_time()
-        page.run_task(self.update_time_loop)
-        
-        return content_stack
-    
-    async def update_time_loop(self):
-        while True:
-            self.update_time()
-            await asyncio.sleep(1)
-    
-    def show_info_dialog(self):
-        dialog = ft.AlertDialog(
-            title=ft.Text("Encryption Information"),
-            content=ft.Column([
-                ft.Text("Advanced encryption system for Python files with multiple layers of protection."),
-                ft.Text("Support Team:", weight=ft.FontWeight.BOLD),
-                ft.Text("First supporter: @LAEGER_MO"),
-                ft.Text("Second supporter: @sis_c"),
-            ], tight=True),
-            actions=[ft.TextButton("OK", on_click=lambda _: self.page.close(dialog))]
-        )
-        self.page.dialog = dialog
-        dialog.open = True
-        self.page.update()
-    
-    def show_time_dialog(self):
-        now = datetime.datetime.now()
-        dialog = ft.AlertDialog(
-            title=ft.Text("Time Information"),
-            content=ft.Column([
-                ft.Text(f"Current Date: {now.strftime('%Y-%m-%d')}"),
-                ft.Text(f"Current Time: {now.strftime('%H:%M:%S')}"),
-                ft.Container(
-                    content=ft.Column([
-                        ft.Text("About Expiry System", weight=ft.FontWeight.BOLD),
-                        ft.Text("The tool will automatically stop working after the expiry date you set."),
-                        ft.Text("When expired, it will show your username and stop execution."),
-                    ]),
-                    bgcolor=ft.colors.GREY_900,
-                    padding=10,
-                    border_radius=5
-                )
-            ], tight=True),
-            actions=[ft.TextButton("OK", on_click=lambda _: self.page.close(dialog))]
-        )
-        self.page.dialog = dialog
-        dialog.open = True
-        self.page.update()
+        info_text = """
+Encryption Information
 
-def main(page: ft.Page):
-    app = NinjiGramProApp()
-    page.add(app.build(page))
+Advanced encryption system for Python files 
+with multiple layers of protection.
 
-if __name__ == "__main__":
-    import asyncio
-    ft.app(target=main)
+Support Team:
+First supporter: @LAEGER_MO
+Second supporter: @sis_c
+        """
+        
+        label = Label(text=info_text, color=get_color_from_hex('#eeeeee'))
+        content.add_widget(label)
+        
+        close_btn = Button(text='Close', size_hint_y=None, height=50,
+                         background_color=get_color_from_hex('#00cc99'))
+        
+        popup = Popup(title='Information', content=content,
+                     size_hint=(0.8, 0.6))
+        
+        close_btn.bind(on_press=popup.dismiss)
+        content.add_widget(close_btn)
+        
+        popup.open()
+
+if __name__ == '__main__':
+    NinjiGramProApp().run()
