@@ -1,25 +1,16 @@
-name: Build Android (APK and AAB)
+name: Build Kivy Android (APK)
 
 on:
-  # التشغيل عند الدفع إلى أي من الفروع التالية
   push:
-    branches:
-      - master
-      - main
-  # التشغيل عند فتح طلب دمج يستهدف أحد الفروع التالية
+    branches: [ master, main ]
   pull_request:
-    branches:
-      - master
-      - main
-
-  # التشغيل اليدوي من علامة تبويب Actions
+    branches: [ master, main ]
   workflow_dispatch:
 
 env:
   BUILD_NUMBER: 1
   BUILD_VERSION: 1.0.0
-  PYTHON_VERSION: 3.12.2
-  FLUTTER_VERSION: 3.22.2
+  PYTHON_VERSION: 3.9
 
 jobs:
   build-apk:
@@ -34,72 +25,54 @@ jobs:
       with:
         python-version: ${{ env.PYTHON_VERSION }}
 
-    - name: Install Python Dependencies
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          python3-pip \
+          openjdk-11-jdk \
+          git \
+          zip \
+          unzip
+
+    - name: Install buildozer and dependencies
       run: |
         python -m pip install --upgrade pip
+        pip install buildozer cython
         pip install -r requirements.txt
 
-    - name: Setup Flutter ${{ env.FLUTTER_VERSION }}
-      uses: subosito/flutter-action@v2
-      with:
-        flutter-version: ${{ env.FLUTTER_VERSION }}
-
-    - name: Setup Java JDK
-      uses: actions/setup-java@v4.2.1
-      with:
-        distribution: 'temurin'
-        java-version: '21'
-
-    - name: Flet Build APK
+    - name: Setup Android SDK
       run: |
-        flutter config --no-analytics
-        flet build apk --verbose --build-number=$BUILD_NUMBER --build-version=$BUILD_VERSION
+        mkdir -p ~/.android
+        touch ~/.android/repositories.cfg
+        wget https://dl.google.com/android/repository/commandlinetools-linux-8512546_latest.zip
+        mkdir -p ~/android-sdk/cmdline-tools
+        unzip commandlinetools-linux-8512546_latest.zip -d ~/android-sdk/cmdline-tools
+        mv ~/android-sdk/cmdline-tools/cmdline-tools ~/android-sdk/cmdline-tools/latest
+        export ANDROID_SDK_ROOT=~/android-sdk
+        echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
+        echo "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin" >> $GITHUB_PATH
+        echo "$ANDROID_SDK_ROOT/platform-tools" >> $GITHUB_PATH
+
+    - name: Accept Android licenses
+      run: |
+        yes | ~/android-sdk/cmdline-tools/latest/bin/sdkmanager --licenses
+
+    - name: Create buildozer.spec if not exists
+      run: |
+        if [ ! -f buildozer.spec ]; then
+          buildozer init
+        fi
+
+    - name: Build APK with buildozer
+      run: |
+        buildozer -v android debug
+        # أو للأرشفة:
+        # buildozer android release
 
     - name: Upload APK Artifact
-      uses: actions/upload-artifact@v4.3.4
+      uses: actions/upload-artifact@v4
       with:
-        name: apk-build-artifact
-        path: build/apk
-        if-no-files-found: warn
-        overwrite: false
-
-  build-aab:
-    runs-on: ubuntu-latest
-
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Setup Python ${{ env.PYTHON_VERSION }}
-      uses: actions/setup-python@v5
-      with:
-        python-version: ${{ env.PYTHON_VERSION }}
-
-    - name: Install Python Dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
-
-    - name: Setup Flutter ${{ env.FLUTTER_VERSION }}
-      uses: subosito/flutter-action@v2
-      with:
-        flutter-version: ${{ env.FLUTTER_VERSION }}
-
-    - name: Setup Java JDK
-      uses: actions/setup-java@v4.2.1
-      with:
-        distribution: 'temurin'
-        java-version: '21'
-
-    - name: Flet Build AAB
-      run: |
-        flutter config --no-analytics
-        flet build aab --verbose --build-number=$BUILD_NUMBER --build-version=$BUILD_VERSION
-
-    - name: Upload AAB Artifact
-      uses: actions/upload-artifact@v4.3.4
-      with:
-        name: aab-build-artifact
-        path: build/aab
-        if-no-files-found: warn
-        overwrite: false
+        name: kivy-apk
+        path: bin/*.apk
+        if-no-files-found: error
