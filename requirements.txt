@@ -1,3 +1,2 @@
-flet
 kivy
-cython
+kivymd
